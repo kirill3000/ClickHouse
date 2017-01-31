@@ -17,6 +17,8 @@
 #include "inftrees.h"
 #include "inflate.h"
 
+#define local static
+
 /* -- memory tracking routines -- */
 
 /*
@@ -66,7 +68,7 @@ struct mem_zone {
 };
 
 /* memory allocation routine to pass to zlib */
-static void *mem_alloc(void *mem, unsigned count, unsigned size)
+local void *mem_alloc(void *mem, unsigned count, unsigned size)
 {
     void *ptr;
     struct mem_item *item;
@@ -107,7 +109,7 @@ static void *mem_alloc(void *mem, unsigned count, unsigned size)
 }
 
 /* memory free routine to pass to zlib */
-static void mem_free(void *mem, void *ptr)
+local void mem_free(void *mem, void *ptr)
 {
     struct mem_item *item, *next;
     struct mem_zone *zone = mem;
@@ -153,7 +155,7 @@ static void mem_free(void *mem, void *ptr)
 
 /* set up a controlled memory allocation space for monitoring, set the stream
    parameters to the controlled routines, with opaque pointing to the space */
-static void mem_setup(z_stream *strm)
+local void mem_setup(z_stream *strm)
 {
     struct mem_zone *zone;
 
@@ -171,7 +173,7 @@ static void mem_setup(z_stream *strm)
 }
 
 /* set a limit on the total memory allocation, or 0 to remove the limit */
-static void mem_limit(z_stream *strm, size_t limit)
+local void mem_limit(z_stream *strm, size_t limit)
 {
     struct mem_zone *zone = strm->opaque;
 
@@ -179,23 +181,23 @@ static void mem_limit(z_stream *strm, size_t limit)
 }
 
 /* show the current total requested allocations in bytes */
-static void mem_used(z_stream *strm, char *prefix)
+local void mem_used(z_stream *strm, char *prefix)
 {
     struct mem_zone *zone = strm->opaque;
 
-    fprintf(stderr, "%s: %zu allocated\n", prefix, zone->total);
+    fprintf(stderr, "%s: %lu allocated\n", prefix, zone->total);
 }
 
 /* show the high water allocation in bytes */
-static void mem_high(z_stream *strm, char *prefix)
+local void mem_high(z_stream *strm, char *prefix)
 {
     struct mem_zone *zone = strm->opaque;
 
-    fprintf(stderr, "%s: %zu high water mark\n", prefix, zone->highwater);
+    fprintf(stderr, "%s: %lu high water mark\n", prefix, zone->highwater);
 }
 
 /* release the memory allocation zone -- if there are any surprises, notify */
-static void mem_done(z_stream *strm, char *prefix)
+local void mem_done(z_stream *strm, char *prefix)
 {
     int count = 0;
     struct mem_item *item, *next;
@@ -216,7 +218,7 @@ static void mem_done(z_stream *strm, char *prefix)
 
     /* issue alerts about anything unexpected */
     if (count || zone->total)
-        fprintf(stderr, "** %s: %zu bytes in %d blocks not freed\n",
+        fprintf(stderr, "** %s: %lu bytes in %d blocks not freed\n",
                 prefix, zone->total, count);
     if (zone->notlifo)
         fprintf(stderr, "** %s: %d frees not LIFO\n", prefix, zone->notlifo);
@@ -235,14 +237,14 @@ static void mem_done(z_stream *strm, char *prefix)
 
 /* Decode a hexadecimal string, set *len to length, in[] to the bytes.  This
    decodes liberally, in that hex digits can be adjacent, in which case two in
-   a row writes a byte.  Or they can be delimited by any non-hex character,
-   where the delimiters are ignored except when a single hex digit is followed
-   by a delimiter, where that single digit writes a byte.  The returned data is
-   allocated and must eventually be freed.  NULL is returned if out of memory.
-   If the length is not needed, then len can be NULL. */
-static unsigned char *h2b(const char *hex, unsigned *len)
+   a row writes a byte.  Or they can delimited by any non-hex character, where
+   the delimiters are ignored except when a single hex digit is followed by a
+   delimiter in which case that single digit writes a byte.  The returned
+   data is allocated and must eventually be freed.  NULL is returned if out of
+   memory.  If the length is not needed, then len can be NULL. */
+local unsigned char *h2b(const char *hex, unsigned *len)
 {
-    unsigned char *in, *re;
+    unsigned char *in;
     unsigned next, val;
 
     in = malloc((strlen(hex) + 1) >> 1);
@@ -266,8 +268,8 @@ static unsigned char *h2b(const char *hex, unsigned *len)
     } while (*hex++);       /* go through the loop with the terminating null */
     if (len != NULL)
         *len = next;
-    re = realloc(in, next);
-    return re == NULL ? in : re;
+    in = reallocf(in, next);
+    return in;
 }
 
 /* generic inflate() run, where hex is the hexadecimal input data, what is the
@@ -279,7 +281,8 @@ static unsigned char *h2b(const char *hex, unsigned *len)
    header information is collected with inflateGetHeader().  If a zlib stream
    is looking for a dictionary, then an empty dictionary is provided.
    inflate() is run until all of the input data is consumed. */
-static void inf(char *hex, char *what, unsigned step, int win, unsigned len, int err)
+local void inf(char *hex, char *what, unsigned step, int win, unsigned len,
+               int err)
 {
     int ret;
     unsigned have;
@@ -344,7 +347,7 @@ static void inf(char *hex, char *what, unsigned step, int win, unsigned len, int
 }
 
 /* cover all of the lines in inflate.c up to inflate() */
-static void cover_support(void)
+local void cover_support(void)
 {
     int ret;
     z_stream strm;
@@ -370,7 +373,7 @@ static void cover_support(void)
     mem_setup(&strm);
     strm.avail_in = 0;
     strm.next_in = Z_NULL;
-    ret = inflateInit_(&strm, ZLIB_VERSION + 1, (int)sizeof(z_stream));
+    ret = inflateInit_(&strm, ZLIB_VERSION - 1, (int)sizeof(z_stream));
                                                 assert(ret == Z_VERSION_ERROR);
     mem_done(&strm, "wrong version");
 
@@ -382,7 +385,7 @@ static void cover_support(void)
 }
 
 /* cover all inflate() header and trailer cases and code after inflate() */
-static void cover_wrap(void)
+local void cover_wrap(void)
 {
     int ret;
     z_stream strm, copy;
@@ -441,7 +444,7 @@ static void cover_wrap(void)
 }
 
 /* input and output functions for inflateBack() */
-static unsigned pull(void *desc, const unsigned char **buf)
+local unsigned pull(void *desc, unsigned char **buf)
 {
     static unsigned int next = 0;
     static unsigned char dat[] = {0x63, 0, 2, 0};
@@ -457,14 +460,14 @@ static unsigned pull(void *desc, const unsigned char **buf)
     return next < sizeof(dat) ? (*buf = dat + next++, 1) : 0;
 }
 
-static int push(void *desc, unsigned char *buf, unsigned len)
+local int push(void *desc, unsigned char *buf, unsigned len)
 {
     buf += len;
     return desc != Z_NULL;      /* force error if desc not null */
 }
 
 /* cover inflateBack() up to common deflate data cases and after those */
-static void cover_back(void)
+local void cover_back(void)
 {
     int ret;
     z_stream strm;
@@ -501,7 +504,7 @@ static void cover_back(void)
 }
 
 /* do a raw inflate of data in hexadecimal with both inflate and inflateBack */
-static int try(char *hex, char *id, int err)
+local int try(char *hex, char *id, int err)
 {
     int ret;
     unsigned len, size;
@@ -575,7 +578,7 @@ static int try(char *hex, char *id, int err)
 }
 
 /* cover deflate data cases in both inflate() and inflateBack() */
-static void cover_inflate(void)
+local void cover_inflate(void)
 {
     try("0 0 0 0 0", "invalid stored block lengths", 1);
     try("3 0", "fixed", 0);
@@ -611,17 +614,17 @@ static void cover_inflate(void)
 }
 
 /* cover remaining lines in inftrees.c */
-static void cover_trees(void)
+local void cover_trees(void)
 {
     int ret;
     unsigned bits;
-    uint16_t lens[16], work[16];
+    unsigned short lens[16], work[16];
     code *next, table[ENOUGH_DISTS];
 
     /* we need to call inflate_table() directly in order to manifest not-
        enough errors, since zlib insures that enough is always enough */
     for (bits = 0; bits < 15; bits++)
-        lens[bits] = (uint16_t)(bits + 1);
+        lens[bits] = (unsigned short)(bits + 1);
     lens[15] = 15;
     next = table;
     bits = 15;
@@ -635,7 +638,7 @@ static void cover_trees(void)
 }
 
 /* cover remaining inffast.c decoding and window copying */
-static void cover_fast(void)
+local void cover_fast(void)
 {
     inf("e5 e0 81 ad 6d cb b2 2c c9 01 1e 59 63 ae 7d ee fb 4d fd b5 35 41 68"
         " ff 7f 0f 0 0 0", "fast length extra bits", 0, -8, 258, Z_DATA_ERROR);
